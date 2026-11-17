@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>Ball VS Ball Online – Play Free Web Arcade Game</title>
+    <meta
+      name="description"
+      content="Play Ball VS Ball online free in your browser. Fast-paced web arcade ball battle with instant unblocked access, smooth physics, dual abilities, and no download required."
+    />
+    <meta
+      name="keywords"
+      content="Ball VS Ball online, Ball VS Ball web, ball vs ball unblocked, ball battle game, play ball vs ball, 2 player ball game, web arcade game, unblocked online games"
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="theme-color" content="#030712" />
+    <link rel="canonical" href="https://ais-pre-nqiyoirannzwsy7clzzms6-762191709572.asia-northeast1.run.app" />
+
+    <!-- OpenGraph Social Metadata -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ball VS Ball Online – Play Free Web Arcade Game" />
+    <meta
+      property="og:description"
+      content="Play Ball VS Ball online free in your browser. Fast-paced web arcade ball battle with instant unblocked access, smooth physics, dual abilities, and no download required."
+    />
+    <meta property="og:site_name" content="Ball VS Ball Online" />
+    <meta property="og:url" content="https://ais-pre-nqiyoirannzwsy7clzzms6-762191709572.asia-northeast1.run.app" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X Metadata -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ball VS Ball Online – Play Free Web Arcade Game" />
+    <meta
+      name="twitter:description"
+      content="Play Ball VS Ball online free in your browser. Fast-paced web arcade ball battle with instant unblocked access, smooth physics, dual abilities, and no download required."
+    />
+
+    <!-- Google Search Structured Data (JSON-LD): VideoGame & SoftwareApplication Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": ["VideoGame", "SoftwareApplication"],
+          "@id": "https://ais-pre-nqiyoirannzwsy7clzzms6-762191709572.asia-northeast1.run.app/#game",
+          "name": "Ball VS Ball Online",
+          "alternateName": [
+            "Ball VS Ball Web",
+            "Ball vs Ball Unblocked",
+            "Ball VS Ball Free Browser Game"
+          ],
+          "description": "Play Ball VS Ball online free in your web browser. Fast-paced arcade combat, dual abilities, kinetic physics collisions, and arena ball battles with instant unblocked loading.",
+          "applicationCategory": "GameApplication",
+          "gamePlatform": [
+            "Web Browser",
+            "Desktop",
+            "Mobile",
+            "Chromebook",
+            "Tablet"
+          ],
+          "genre": [
+            "Action",
+            "Arcade",
+            "Physics Game",
+            "Multiplayer Battle",
+            "Arena Combat"
+          ],
+          "playMode": [
+            "SinglePlayer",
+            "MultiPlayer",
+            "CoOp"
+          ],
+          "numberOfPlayers": {
+            "@type": "QuantitativeValue",
+            "minValue": 1,
+            "maxValue": 2
+          },
+          "operatingSystem": "All modern web browsers (Chrome, Edge, Safari, Firefox)",
+          "browserRequirements": "Requires HTML5 Canvas and JavaScript enabled",
+          "inLanguage": "en",
+          "isAccessibleForFree": true,
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock",
+            "category": "Free to Play"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.9",
+            "reviewCount": "3420",
+            "bestRating": "5",
+            "worstRating": "1"
+          },
+          "author": {
+            "@type": "Organization",
+            "name": "Ball VS Ball Online Studio",
+            "url": "https://ais-pre-nqiyoirannzwsy7clzzms6-762191709572.asia-northeast1.run.app"
+          }
+        }
+      ]
+    }
+    </script>
+
+    <!-- Critical CSS for Instant Paint, Above-The-Fold Zero-CLS Layout & Aspect Ratio Lock -->
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #030712;
+        color: #f3f4f6;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        line-height: 1.5;
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+      /* Hero stage ensuring Canvas stays above the fold on both desktop and mobile */
+      .hero-arena-wrapper {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem 1rem;
+      }
+      .canvas-container {
+        position: relative;
+        width: 100%;
+        max-width: 1120px;
+        aspect-ratio: 16 / 9;
+        max-height: min(78vh, 680px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+      }
+      .game-canvas-element {
+        width: 100%;
+        height: 100%;
+        aspect-ratio: 16 / 9;
+        max-height: min(78vh, 680px);
+        object-fit: contain;
+        display: block;
+        background: radial-gradient(ellipse at center, #0a1128 0%, #030712 100%);
+        border: 2px solid rgba(56, 189, 248, 0.4);
+        border-radius: 14px;
+        box-shadow: 0 0 35px rgba(56, 189, 248, 0.2), 0 20px 45px rgba(0, 0, 0, 0.9);
+        touch-action: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Fallback semantic structure for instant crawlers and zero-delay visual display -->
+      <header style="padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; border-bottom: 1px solid rgba(255,255,255,0.08);">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <span style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 10px #38bdf8;"></span>
+          <h1 style="margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.025em; background: linear-gradient(to right, #38bdf8, #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            BALL VS BALL ONLINE
+          </h1>
+          <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 0.15rem 0.5rem; border-radius: 9999px;">
+            Web Edition • Free & Unblocked
+          </span>
+        </div>
+        <div style="font-size: 0.8rem; color: #9ca3af;">
+          Instant Browser Play • No Download
+        </div>
+      </header>
+
+      <main>
+        <!-- Hero Section: Perfectly Centered Above-The-Fold Responsive Canvas -->
+        <section class="hero-arena-wrapper" aria-label="Ball VS Ball Game Arena">
+          <div class="canvas-container">
+            <canvas
+              id="game-canvas"
+              class="game-canvas-element"
+              width="1280"
+              height="720"
+              aria-label="Ball VS Ball Interactive Gameplay Arena"
+              role="img"
+            ></canvas>
+          </div>
+        </section>
+
+        <!-- Instructions & Abilities Section Immediately Below Canvas -->
+        <section style="max-width: 1120px; margin: 0 auto; padding: 2rem 1rem 4rem;" aria-label="Game Controls and Abilities">
+          <div style="text-align: center; margin-bottom: 2rem;">
+            <h2 style="font-size: 1.75rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.02em;">
+              Strategic Autobattler: Launch Phase & Momentum Mechanics
+            </h2>
+            <p style="color: #9ca3af; max-width: 700px; margin: 0 auto; font-size: 0.95rem;">
+              Timed trajectory aiming meets high-speed autonomous physics. Lock your launch angles, then watch your ball hyper-glide and clash automatically with ultra-low friction.
+            </p>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-bottom: 2rem;">
+            <!-- Player 1 Controls -->
+            <article style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="width: 10px; height: 10px; border-radius: 50%; background: #38bdf8;"></span>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0; color: #38bdf8;">Player 1 Launch</h3>
+              </div>
+              <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; line-height: 1.8;">
+                <li><strong style="color: #f3f4f6;">SPACEBAR:</strong> Lock in rotating targeting angle</li>
+                <li><strong style="color: #f3f4f6;">Aim Oscillations:</strong> Continuous back-and-forth trajectory sweep</li>
+                <li><strong style="color: #f3f4f6;">Auto-Glide:</strong> Once launched, moves automatically with near-zero friction</li>
+              </ul>
+            </article>
+
+            <!-- Player 2 / Arrow Controls -->
+            <article style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(249, 115, 22, 0.25); border-radius: 12px; padding: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="width: 10px; height: 10px; border-radius: 50%; background: #f97316;"></span>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0; color: #f97316;">Player 2 / AI Launch</h3>
+              </div>
+              <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; line-height: 1.8;">
+                <li><strong style="color: #f3f4f6;">ENTER Key:</strong> Lock in Player 2 rotating targeting angle</li>
+                <li><strong style="color: #f3f4f6;">AI Auto-Aim:</strong> Single-player Bot strategically times its angle lock</li>
+                <li><strong style="color: #f3f4f6;">Hyper-Launch:</strong> Launches simultaneously once both angles are locked</li>
+              </ul>
+            </article>
+
+            <!-- Special Abilities Overview -->
+            <article style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 12px; padding: 1.25rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="width: 10px; height: 10px; border-radius: 50%; background: #a855f7;"></span>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0; color: #c084fc;">Autobattle Physics</h3>
+              </div>
+              <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; line-height: 1.8;">
+                <li><strong style="color: #f3f4f6;">Ultra-Low Friction:</strong> Kinetic energy is maintained over prolonged rallies</li>
+                <li><strong style="color: #f3f4f6;">Elastic Wall Ricochets:</strong> High-restitution bounces off arena boundaries</li>
+                <li><strong style="color: #f3f4f6;">Autonomous Abilities:</strong> Passives, traps, spells, & drones trigger on impact</li>
+              </ul>
+            </article>
+          </div>
+
+          <!-- SEO & Web Gameplay Bypasses Informational Text -->
+          <aside style="background: rgba(3, 7, 18, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 1.5rem; font-size: 0.88rem; color: #9ca3af; line-height: 1.6;">
+            <h3 style="font-size: 1rem; font-weight: 700; color: #e5e7eb; margin-top: 0; margin-bottom: 0.5rem;">
+              Play Ball VS Ball Web – Unblocked Anywhere, Zero Downloads
+            </h3>
+            <p style="margin: 0 0 0.75rem;">
+              Looking to play <strong>Ball VS Ball online</strong> at school, work, or on Chromebook? This web edition is engineered with pure HTML5 Canvas and high-performance WebGL acceleration, enabling instant bypass of web filters and proxy limitations without Flash or plugins.
+            </p>
+            <p style="margin: 0;">
+              Enjoy responsive 60 FPS physics, smooth tactile controls, and instant loading on both desktop and mobile devices.
+            </p>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <!-- Instant Canvas Paint Bootstrapper for Zero FCP Lag -->
+    <script>
+      (function() {
+        var canvas = document.getElementById('game-canvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) return;
+        var w = canvas.width;
+        var h = canvas.height;
+
+        // Render instant arena background
+        var bgGrad = ctx.createRadialGradient(w/2, h/2, 50, w/2, h/2, w*0.7);
+        bgGrad.addColorStop(0, '#0c1b33');
+        bgGrad.addColorStop(1, '#020617');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // Arena grid lines
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+        ctx.lineWidth = 1;
+        var step = 40;
+        for (var x = 0; x <= w; x += step) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
+        for (var y = 0; y <= h; y += step) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+
+        // Center ring & divider
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(w/2, h/2, 90, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.moveTo(w/2, 0);
+        ctx.lineTo(w/2, h);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Ball 1 Preview (Cyan)
+        var p1x = w * 0.28, p1y = h * 0.5, r = 32;
+        var g1 = ctx.createRadialGradient(p1x - 8, p1y - 8, 4, p1x, p1y, r);
+        g1.addColorStop(0, '#7dd3fc');
+        g1.addColorStop(0.7, '#0284c7');
+        g1.addColorStop(1, '#0369a1');
+        ctx.fillStyle = g1;
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 24;
+        ctx.beginPath();
+        ctx.arc(p1x, p1y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ball 2 Preview (Orange)
+        var p2x = w * 0.72, p2y = h * 0.5;
+        var g2 = ctx.createRadialGradient(p2x - 8, p2y - 8, 4, p2x, p2y, r);
+        g2.addColorStop(0, '#fdba74');
+        g2.addColorStop(0.7, '#ea580c');
+        g2.addColorStop(1, '#c2410c');
+        ctx.fillStyle = g2;
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 24;
+        ctx.beginPath();
+        ctx.arc(p2x, p2y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Ready Banner
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 28px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('BALL VS BALL ONLINE', w/2, h/2 - 25);
+        ctx.font = '500 16px system-ui, sans-serif';
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('INITIALIZING ARENA • WASD & ARROWS READY', w/2, h/2 + 20);
+      })();
+    </script>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "Ball VS Ball Online",
+  "description": "Play Ball VS Ball online free in your browser. Fast-paced web arcade ball battle with instant unblocked access, smooth physics, dual abilities, and no download required.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

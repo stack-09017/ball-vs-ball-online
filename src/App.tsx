@@ -45,6 +45,7 @@ import {
   Wifi
 } from 'lucide-react';
 import DraftScreen from './components/DraftScreen';
+import GoogleLoginButton from './components/GoogleLoginButton';
 
 const RAW_WORKER_URL = (
   import.meta.env.VITE_WORKER_URL ||
@@ -16485,6 +16486,8 @@ export default function App() {
   const [username, setUsername] = useState<string>('Fighter');
   const [isGuestAccount, setIsGuestAccount] = useState<boolean>(true);
   const [unlockedBalls, setUnlockedBalls] = useState<string[]>([]);
+  const unlockedBallsRef = useRef<string[]>([]);
+  unlockedBallsRef.current = unlockedBalls;
   const [, setAuthToken] = useState<string | null>(null);
   const authTokenRef = useRef<string | null>(null);
   const walletSocketRef = useRef<WebSocket | null>(null);
@@ -16641,8 +16644,14 @@ export default function App() {
     []
   );
 
+  const getCharacterUnlockCost = useCallback(
+    (characterId: string): number => (characterId.trim() === 'capedbaldy' ? 9999 : 100),
+    []
+  );
+
   const handlePurchaseCharacter = useCallback(
-    (characterId: string, cost = 100) => {
+    (characterId: string, cost?: number) => {
+      const resolvedCost = cost ?? getCharacterUnlockCost(characterId);
       setPurchaseErrorMsg(null);
       const activeSocket =
         socketRef.current && socketRef.current.readyState === WebSocket.OPEN
@@ -16662,9 +16671,9 @@ export default function App() {
           audioController.synthesizeEnvelope('sine', 520, 780, 0.14, 0.25);
         }
       });
-      sendWsEvent(activeSocket, 'purchase_character', { characterId, cost }, reqId);
+      sendWsEvent(activeSocket, 'purchase_character', { characterId, cost: resolvedCost }, reqId);
     },
-    []
+    [getCharacterUnlockCost]
   );
 
   useEffect(() => {
@@ -16777,6 +16786,42 @@ export default function App() {
     }
   };
 
+  const handleGoogleAuthCredential = useCallback(
+    async (credential: string) => {
+      if (authLoading) return;
+      setAuthError(null);
+      setAuthLoading(true);
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        const currentToken = localStorage.getItem('authToken') || authTokenRef.current;
+        if (currentToken) {
+          headers.Authorization = `Bearer ${currentToken}`;
+        }
+        const res = await fetch(`${WORKER_HTTP_URL}/api/auth/google`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ credential }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setAuthError(data?.error || 'Google authentication failed.');
+        } else if (data?.token && data?.user) {
+          applyAuthenticatedUser(data.token, data.user);
+          setAuthModalMode(null);
+          setAuthScreenTab(null);
+          setAuthFormUsername('');
+          setAuthFormPassword('');
+          navigationManager.navigateTo('main-menu');
+        }
+      } catch {
+        setAuthError('Network error while contacting Cloudflare authentication server.');
+      } finally {
+        setAuthLoading(false);
+      }
+    },
+    [authLoading, applyAuthenticatedUser]
+  );
+
   const handleUsernameChange = useCallback(
     (value: string) => {
       const sliced = value.slice(0, 12);
@@ -16845,9 +16890,9 @@ export default function App() {
   const [isWaitingForFriend, setIsWaitingForFriend] = useState<boolean>(false);
   const [isMatchmakingSearching, setIsMatchmakingSearching] = useState<boolean>(false);
 
-  // 3-Ball Draft & Coin Re-Roll State
+  // 3-Ball Draft & Coin Re-Roll State (Saitama stays locked out of free drafts until unlocked for 9,999 Coins)
   const [draftOptions, setDraftOptions] = useState<(typeof BALL_TYPES)[number][]>(() => {
-    const pool = [...BALL_TYPES];
+    const pool = BALL_TYPES.filter((b) => b.id !== 'capedbaldy');
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -16860,7 +16905,8 @@ export default function App() {
   const rerollFlashTimeoutRef = useRef<number | null>(null);
 
   const generateDraft = useCallback(() => {
-    const pool = [...BALL_TYPES];
+    const hasSaitama = unlockedBallsRef.current.includes('capedbaldy');
+    const pool = BALL_TYPES.filter((b) => b.id !== 'capedbaldy' || hasSaitama);
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -20534,12 +20580,12 @@ export default function App() {
           setMatchStatus(`MATCHED (${resolvedRoomId}) · YOU ARE ${resolvedRole.toUpperCase()}`);
           setIsOnlineMode(true);
           setPlayAgainstBot(false);
-          setP1Drafting(null);
           setP2Drafting(null);
           setP1Locked(false);
           setP2Locked(false);
           setIsChangingBalls(false);
-          generateDraft();
+          const initialOnlineDraft = generateDraft();
+          setP1Drafting(initialOnlineDraft[0]?.id ?? null);
           setGameState('draft');
 
           // Transition seamlessly from MatchmakerDO socket to dedicated GameRoomDO WebSocket
@@ -20770,7 +20816,6 @@ export default function App() {
           }
           setRoundOverBanner(false);
           setRoundOverlay(null);
-          setP1Drafting(null);
           setP2Drafting(null);
           setP1Locked(false);
           setP2Locked(false);
@@ -20782,7 +20827,8 @@ export default function App() {
               `ROUND ${data.roundNumber ?? ''} DRAFT · HEARTS P1: ${data.hearts.p1} ❤️ | P2: ${data.hearts.p2} ❤️`
             );
           }
-          generateDraft();
+          const nextOnlineDraft = generateDraft();
+          setP1Drafting(nextOnlineDraft[0]?.id ?? null);
           setGameState('draft');
           break;
         }
@@ -21249,7 +21295,10 @@ export default function App() {
           triggerInsufficientFlash();
         } else {
           playSound('hit');
-          generateDraft();
+          const refreshed3 = generateDraft();
+          if (isOnlineMode) {
+            setP1Drafting(refreshed3[0]?.id ?? null);
+          }
         }
       });
       sendWsEvent(activeSocket, 'reroll_draft', {}, reqId);
@@ -21282,7 +21331,8 @@ export default function App() {
         setP1Locked(true);
         setP1BallType(chosenId);
         if (playAgainstBot) {
-          const randomBotCard = BALL_TYPES[Math.floor(Math.random() * BALL_TYPES.length)];
+          const botPool = BALL_TYPES.filter((b) => b.id !== 'capedbaldy');
+          const randomBotCard = botPool[Math.floor(Math.random() * botPool.length)];
           setP2Drafting(randomBotCard.id);
           setP2Locked(true);
           setP2BallType(randomBotCard.id);
@@ -21647,6 +21697,21 @@ export default function App() {
                   <Gamepad2 className="w-4 h-4" />
                   <span>Play as Guest</span>
                 </button>
+
+                <div className="w-full flex items-center gap-3 my-1">
+                  <div className="h-px flex-1 bg-white/15" />
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                    or
+                  </span>
+                  <div className="h-px flex-1 bg-white/15" />
+                </div>
+
+                <GoogleLoginButton
+                  label="signin_with"
+                  disabled={authLoading}
+                  onCredential={handleGoogleAuthCredential}
+                  onConfigOrNetworkError={(msg) => setAuthError(msg)}
+                />
               </div>
 
               {/* Credentials Form for Login or Create Account */}
@@ -21873,6 +21938,20 @@ export default function App() {
                       ? 'Link & Keep Coins'
                       : 'Create Account'}
                   </button>
+
+                  {authModalMode === 'link' && (
+                    <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
+                      <span className="text-[11px] font-semibold text-slate-400 text-center">
+                        Or link with Google to keep your coins
+                      </span>
+                      <GoogleLoginButton
+                        label="continue_with"
+                        disabled={authLoading}
+                        onCredential={handleGoogleAuthCredential}
+                        onConfigOrNetworkError={(msg) => setAuthError(msg)}
+                      />
+                    </div>
+                  )}
                 </form>
               )}
             </div>
@@ -22270,10 +22349,13 @@ export default function App() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handlePurchaseCharacter(info.id, 100)}
-                            className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(245,158,11,0.35)] transition cursor-pointer"
+                            onClick={() =>
+                              handlePurchaseCharacter(info.id, getCharacterUnlockCost(info.id))
+                            }
+                            className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(245,158,11,0.35)] transition cursor-pointer tabular-nums"
                           >
-                            🪙 Purchase Character (Cost: 100 Coins)
+                            🪙 Purchase Character (Cost:{' '}
+                            {getCharacterUnlockCost(info.id).toLocaleString()} Coins)
                           </button>
                         )}
                         {purchaseErrorMsg && (

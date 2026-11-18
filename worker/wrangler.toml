@@ -6,6 +6,8 @@ compatibility_date = "2026-01-01"
 # Override in production using: npx wrangler secret put JWT_SECRET
 JWT_SECRET = "ball_vs_ball_dev_secret_change_in_production"
 ALLOWED_ORIGIN = "*"
+# Optional: paste your Google OAuth 2.0 Web Client ID to strictly verify Google Login audience (`aud`)
+GOOGLE_CLIENT_ID = ""
 
 [[d1_databases]]
 binding = "DB"

@@ -110,21 +110,40 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
   onBack,
   onOpenLibrary,
 }) => {
-  const [filterMode, setFilterMode] = useState<DraftPoolFilter>('all');
+  const [filterMode, setFilterMode] = useState<DraftPoolFilter>(() =>
+    isOnlineMode ? 'pool' : 'all'
+  );
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [inspectedBallId, setInspectedBallId] = useState<string>(
-    () => p1Drafting || draftPoolIds[0] || balls[0]?.id || 'standard'
+    () =>
+      (isOnlineMode
+        ? p1Drafting && draftPoolIds.includes(p1Drafting)
+          ? p1Drafting
+          : draftPoolIds[0]
+        : p1Drafting || draftPoolIds[0]) ||
+      balls[0]?.id ||
+      'standard'
   );
 
+  // Enforce strict 3-option pool whenever entering or refreshing Online Mode
   useEffect(() => {
-    if (isOnlineMode && p1Drafting) {
-      setInspectedBallId(p1Drafting);
-    } else if (!isOnlineMode && p1Locked && !p2Locked && p2Drafting) {
-      setInspectedBallId(p2Drafting);
-    } else if (!isOnlineMode && p1Drafting) {
-      setInspectedBallId(p1Drafting);
+    if (isOnlineMode) {
+      setFilterMode('pool');
+      setSearchQuery('');
+      if (p1Drafting && draftPoolIds.includes(p1Drafting)) {
+        setInspectedBallId(p1Drafting);
+      } else if (draftPoolIds[0]) {
+        setInspectedBallId(draftPoolIds[0]);
+      }
+      return;
     }
-  }, [isOnlineMode, p1Drafting, p2Drafting, p1Locked, p2Locked]);
+
+    if (!p1Locked && p1Drafting) {
+      setInspectedBallId(p1Drafting);
+    } else if (p1Locked && !p2Locked && p2Drafting) {
+      setInspectedBallId(p2Drafting);
+    }
+  }, [isOnlineMode, draftPoolIds, p1Drafting, p2Drafting, p1Locked, p2Locked]);
 
   const localSide: 'p1' | 'p2' = isOnlineMode
     ? onlineRole === 'Player 2'
@@ -134,7 +153,15 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
     ? 'p2'
     : 'p1';
 
+  const isBallLockedFromPlay = (ballId: string): boolean =>
+    ballId === 'capedbaldy' && !unlockedBalls.includes('capedbaldy');
+
   const filteredBalls = useMemo(() => {
+    if (isOnlineMode) {
+      const poolSet = new Set(draftPoolIds);
+      return balls.filter((b) => poolSet.has(b.id)).slice(0, 3);
+    }
+
     let list = balls;
     if (filterMode === 'pool') {
       const poolSet = new Set(draftPoolIds);
@@ -154,13 +181,20 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
       );
     }
     return list;
-  }, [balls, filterMode, draftPoolIds, unlockedBalls, searchQuery]);
+  }, [isOnlineMode, balls, filterMode, draftPoolIds, unlockedBalls, searchQuery]);
 
-  const inspectedBall = useMemo(
-    () => balls.find((b) => b.id === inspectedBallId) || balls[0],
-    [balls, inspectedBallId]
-  );
+  const inspectedBall = useMemo(() => {
+    if (isOnlineMode) {
+      return (
+        filteredBalls.find((b) => b.id === inspectedBallId) ||
+        filteredBalls[0] ||
+        balls[0]
+      );
+    }
+    return balls.find((b) => b.id === inspectedBallId) || balls[0];
+  }, [isOnlineMode, filteredBalls, balls, inspectedBallId]);
   const inspectedMeta = inspectedBall ? visualMeta[inspectedBall.id] : undefined;
+  const inspectedRequiresUnlock = inspectedBall ? isBallLockedFromPlay(inspectedBall.id) : false;
 
   const p1BallObj = balls.find((b) => b.id === p1Drafting) || null;
   const p2BallObj = balls.find((b) => b.id === p2Drafting) || null;
@@ -170,8 +204,12 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
 
   const handleCardSelect = (ballId: string) => {
     if (isDraftLockedWaiting) return;
+    if (isOnlineMode && !draftPoolIds.includes(ballId)) return;
     setInspectedBallId(ballId);
     if (!isOnlineMode && isLocalReadyToEnter) {
+      return;
+    }
+    if (isBallLockedFromPlay(ballId)) {
       return;
     }
     onSelectPreview(localSide, ballId);
@@ -181,8 +219,10 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
     if (isDraftLockedWaiting) return;
     const chosenBallId = overrideBallId || inspectedBall?.id;
     if (!chosenBallId) return;
+    if (isBallLockedFromPlay(chosenBallId)) return;
 
     if (isOnlineMode) {
+      if (!draftPoolIds.includes(chosenBallId)) return;
       const playerSide = onlineRole === 'Player 2' ? 'p2' : 'p1';
       const localDisplayName = (username.trim() || p1Name.trim() || 'Fighter').slice(0, 12);
       emitWsEvent('lock_draft', {
@@ -206,10 +246,12 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
   };
 
   const handleRandomPick = () => {
-    if (isDraftLockedWaiting) return;
-    const pool = filteredBalls.length > 0 ? filteredBalls : balls;
-    if (pool.length === 0) return;
-    const randomBall = pool[Math.floor(Math.random() * pool.length)];
+    if (isOnlineMode || isDraftLockedWaiting) return;
+    const eligible = (filteredBalls.length > 0 ? filteredBalls : balls).filter(
+      (b) => !isBallLockedFromPlay(b.id)
+    );
+    if (eligible.length === 0) return;
+    const randomBall = eligible[Math.floor(Math.random() * eligible.length)];
     handleCardSelect(randomBall.id);
   };
 
@@ -344,7 +386,9 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
               {turnHeadline}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Select a fighter from the grid below, review their physics and ability, then lock in for the round.
+              {isOnlineMode
+                ? 'Choose from your 3 random draft options below, or spend 25 Coins to refresh them.'
+                : 'Select a fighter from the grid below, review their physics and ability, then lock in for the round.'}
             </p>
           </div>
 
@@ -426,98 +470,141 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
           {/* Left Column: Filter Controls & Draftable Balls Grid */}
           <div className="lg:col-span-8 flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-2.5">
-              {/* Interactive Pool Filter Buttons */}
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950/80 border border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setFilterMode('all')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                    filterMode === 'all'
-                      ? 'bg-sky-500 text-slate-950'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  All Fighters ({balls.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterMode('pool')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                    filterMode === 'pool'
-                      ? 'bg-sky-500 text-slate-950'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  3-Pick Draft ({draftPoolIds.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterMode('unlocked')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                    filterMode === 'unlocked'
-                      ? 'bg-sky-500 text-slate-950'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  Unlocked ({unlockedBalls.length})
-                </button>
-              </div>
-
-              {/* Search & Utility Controls */}
-              <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
-                <div className="relative flex-1 sm:w-52">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search fighters..."
-                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-950/80 border border-white/10 focus:border-sky-400 text-xs text-white placeholder:text-slate-500 focus:outline-none"
-                  />
+            {isOnlineMode ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-slate-950/80 border border-sky-500/30 text-xs">
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-white uppercase tracking-wider">
+                    Online 3-Option Draft
+                  </span>
+                  <span className="text-slate-300">
+                    Balance:{' '}
+                    <strong className="font-mono tabular-nums text-amber-300">
+                      {coins.toLocaleString()} Coins
+                    </strong>
+                    {rerollErrorFlash && (
+                      <span className="ml-2 font-bold text-rose-400">
+                        Not enough coins (25 required)
+                      </span>
+                    )}
+                  </span>
                 </div>
-
-                <button
-                  type="button"
-                  disabled={isDraftLockedWaiting || isLocalReadyToEnter}
-                  onClick={handleRandomPick}
-                  title="Pick a random fighter from the current view"
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-white/15 hover:border-sky-400 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
-                >
-                  <Dices className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Random</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Optional Re-roll Bar when viewing the 3-Pick Pool */}
-            {filterMode === 'pool' && (
-              <div className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl bg-slate-950/70 border border-white/10 text-xs">
-                <span className="text-slate-300">
-                  3-Pick Pool · Balance: <strong className="font-mono tabular-nums text-amber-300">{coins.toLocaleString()} Coins</strong>
-                </span>
                 <button
                   id="reroll-draft-btn"
                   type="button"
                   disabled={isDraftLockedWaiting}
                   onClick={onRerollDraft}
-                  className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 border ${
+                  className={`px-3.5 py-2 rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 border ${
                     rerollErrorFlash
                       ? 'bg-rose-600 border-rose-300 text-white'
+                      : coins < 25
+                      ? 'bg-slate-900 border-slate-700 text-slate-400 hover:border-rose-400/60'
                       : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-400/50 text-amber-300'
                   } disabled:opacity-50`}
                 >
                   <Coins className="w-3.5 h-3.5" />
-                  <span>Re-roll Pool (25 Coins)</span>
+                  <span>Refresh Options (25 Coins)</span>
                 </button>
               </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
+                  {/* Interactive Pool Filter Buttons (Local & vs Bot only) */}
+                  <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950/80 border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                        filterMode === 'all'
+                          ? 'bg-sky-500 text-slate-950'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      All Fighters ({balls.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode('pool')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                        filterMode === 'pool'
+                          ? 'bg-sky-500 text-slate-950'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      3-Pick Draft ({draftPoolIds.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode('unlocked')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                        filterMode === 'unlocked'
+                          ? 'bg-sky-500 text-slate-950'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      Unlocked ({unlockedBalls.length})
+                    </button>
+                  </div>
+
+                  {/* Search & Utility Controls */}
+                  <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+                    <div className="relative flex-1 sm:w-52">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search fighters..."
+                        className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-950/80 border border-white/10 focus:border-sky-400 text-xs text-white placeholder:text-slate-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isDraftLockedWaiting || isLocalReadyToEnter}
+                      onClick={handleRandomPick}
+                      title="Pick a random fighter from the current view"
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-white/15 hover:border-sky-400 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+                    >
+                      <Dices className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Random</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Re-roll Bar when viewing the 3-Pick Pool */}
+                {filterMode === 'pool' && (
+                  <div className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl bg-slate-950/70 border border-white/10 text-xs">
+                    <span className="text-slate-300">
+                      3-Pick Pool · Balance: <strong className="font-mono tabular-nums text-amber-300">{coins.toLocaleString()} Coins</strong>
+                    </span>
+                    <button
+                      id="reroll-draft-btn"
+                      type="button"
+                      disabled={isDraftLockedWaiting}
+                      onClick={onRerollDraft}
+                      className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 border ${
+                        rerollErrorFlash
+                          ? 'bg-rose-600 border-rose-300 text-white'
+                          : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-400/50 text-amber-300'
+                      } disabled:opacity-50`}
+                    >
+                      <Coins className="w-3.5 h-3.5" />
+                      <span>Refresh Options (25 Coins)</span>
+                    </button>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Draftable Balls Grid */}
             <div
               role="grid"
               aria-label="Draftable Balls Grid"
-              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-[410px] overflow-y-auto pr-1"
+              className={`grid gap-2.5 ${
+                isOnlineMode
+                  ? 'grid-cols-1 sm:grid-cols-3 py-2'
+                  : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 max-h-[410px] overflow-y-auto pr-1'
+              }`}
             >
               {filteredBalls.length === 0 ? (
                 <div className="col-span-full py-12 text-center text-xs text-slate-400 border border-white/10 rounded-xl bg-slate-950/50">
@@ -530,10 +617,15 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
                   const isP1Picked = p1Drafting === ball.id;
                   const isP2Picked = !isOnlineMode && p2Drafting === ball.id;
                   const isUnlocked = unlockedBalls.includes(ball.id);
+                  const isSaitamaLocked = isBallLockedFromPlay(ball.id);
 
                   let cardBorderClass =
                     'border-white/10 bg-slate-950/65 hover:border-sky-400/60 hover:bg-slate-900/90';
-                  if (isP1Picked && isP2Picked) {
+                  if (isSaitamaLocked) {
+                    cardBorderClass = isInspected
+                      ? 'border-amber-400/80 bg-slate-900/95'
+                      : 'border-amber-500/25 bg-slate-950/70 opacity-85 hover:border-amber-400/60';
+                  } else if (isP1Picked && isP2Picked) {
                     cardBorderClass = 'border-purple-400 bg-purple-950/45 ring-1 ring-purple-400/60';
                   } else if (isP1Picked) {
                     cardBorderClass = 'border-sky-400 bg-sky-950/45 ring-1 ring-sky-400/60';
@@ -550,10 +642,12 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
                       disabled={isDraftLockedWaiting}
                       onClick={() => handleCardSelect(ball.id)}
                       onDoubleClick={() => handleLockDraft(ball.id)}
-                      className={`group relative rounded-xl p-3 border text-left flex flex-col items-center gap-2 transition-all duration-150 cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-sky-400 ${cardBorderClass} disabled:opacity-60 disabled:cursor-not-allowed`}
+                      className={`group relative rounded-xl ${
+                        isOnlineMode ? 'p-5' : 'p-3'
+                      } border text-left flex flex-col items-center gap-2 transition-all duration-150 cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-sky-400 ${cardBorderClass} disabled:opacity-60 disabled:cursor-not-allowed`}
                     >
                       {/* Clean unboxed selection marker */}
-                      {(isP1Picked || isP2Picked) && (
+                      {(isP1Picked || isP2Picked) && !isSaitamaLocked && (
                         <span className="absolute top-2 right-2 text-[10px] font-bold tracking-tight text-slate-200">
                           {isOnlineMode
                             ? p1Locked
@@ -572,7 +666,9 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
                       )}
 
                       <div
-                        className="w-12 h-12 rounded-full flex items-center justify-center text-2xl border border-white/25 shrink-0 transition-transform duration-150 group-hover:scale-105"
+                        className={`${
+                          isOnlineMode ? 'w-16 h-16 text-3xl' : 'w-12 h-12 text-2xl'
+                        } rounded-full flex items-center justify-center border border-white/25 shrink-0 transition-transform duration-150 group-hover:scale-105`}
                         style={{
                           backgroundColor: meta?.color || '#38bdf8',
                           boxShadow: `0 0 16px ${meta?.color || '#38bdf8'}44`,
@@ -588,11 +684,15 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
                         <span className="block text-[11px] text-slate-400 truncate mt-0.5">
                           {ball.badge.split('•').pop()?.trim() || ball.badge}
                         </span>
-                        {isUnlocked && (
+                        {isSaitamaLocked ? (
+                          <span className="block text-[10px] text-amber-300 font-bold mt-0.5 tabular-nums">
+                            Locked · 9,999 Coins
+                          </span>
+                        ) : isUnlocked ? (
                           <span className="block text-[10px] text-emerald-400 font-medium mt-0.5">
                             Unlocked
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </button>
                   );
@@ -700,6 +800,15 @@ export const DraftScreen: React.FC<DraftScreenProps> = ({
                     <span>Change Picks</span>
                   </button>
                 </div>
+              ) : inspectedRequiresUnlock ? (
+                <button
+                  type="button"
+                  onClick={onOpenLibrary}
+                  className="w-full py-3.5 px-5 rounded-xl font-black text-sm uppercase tracking-wider bg-amber-500 hover:bg-amber-400 text-slate-950 transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>Unlock in Library (9,999 Coins)</span>
+                </button>
               ) : (
                 <button
                   id="confirm-btn"

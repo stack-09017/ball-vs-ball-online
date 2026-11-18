@@ -65,12 +65,15 @@ export interface Env {
   GAME_ROOM: WorkerDurableObjectNamespace;
   JWT_SECRET?: string;
   ALLOWED_ORIGIN?: string;
+  GOOGLE_CLIENT_ID?: string;
 }
 
 interface UserRow {
   id: string;
   username: string;
   password_hash: string | null;
+  google_sub?: string | null;
+  email?: string | null;
   coins: number;
   is_guest: number;
   unlocked_balls: string;
@@ -81,6 +84,7 @@ interface UserRow {
 interface PublicUser {
   _id: string;
   username: string;
+  email?: string;
   coins: number;
   isGuest: boolean;
   unlockedBalls: string[];
@@ -105,9 +109,14 @@ const DEFAULT_JWT_SECRET = 'ball_vs_ball_dev_secret_change_in_production';
 const PBKDF2_ITERATIONS = 100_000;
 const JWT_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const CHARACTER_UNLOCK_COST = 100;
+const SAITAMA_UNLOCK_COST = 9999;
 const DRAFT_REROLL_COST = 25;
 const WINNER_COIN_REWARD = 50;
 const LOSER_COIN_REWARD = 10;
+
+function getAuthoritativeCharacterCost(characterId: string): number {
+  return characterId.trim() === 'capedbaldy' ? SAITAMA_UNLOCK_COST : CHARACTER_UNLOCK_COST;
+}
 
 // Arena geometry matching the HTML5 1280x720 Canvas (620x620 inner square)
 const CANVAS_W = 1280;
@@ -376,24 +385,64 @@ function toPublicUser(row: UserRow): PublicUser {
   return {
     _id: row.id,
     username: row.username,
+    ...(row.email ? { email: row.email } : {}),
     coins: Number(row.coins) || 0,
     isGuest: Boolean(row.is_guest),
     unlockedBalls: parseUnlockedBalls(row.unlocked_balls),
   };
 }
 
+let usersGoogleSchemaEnsured = false;
+
+async function ensureUsersGoogleSchema(db: WorkerD1Database): Promise<void> {
+  if (usersGoogleSchemaEnsured) return;
+  try {
+    const info = await db.prepare('PRAGMA table_info(users)').all<{ name?: string }>();
+    const cols = new Set((info.results || []).map((c) => String(c.name || '')));
+    if (!cols.has('google_sub')) {
+      await db.prepare('ALTER TABLE users ADD COLUMN google_sub TEXT').run();
+    }
+    if (!cols.has('email')) {
+      await db.prepare('ALTER TABLE users ADD COLUMN email TEXT').run();
+    }
+    await db
+      .prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub)')
+      .run();
+    usersGoogleSchemaEnsured = true;
+  } catch {
+    // Fallback if ALTER raced across workers; re-check next call
+  }
+}
+
 async function findUserById(db: WorkerD1Database, id: string): Promise<UserRow | null> {
   if (!id) return null;
+  await ensureUsersGoogleSchema(db);
   return db
-    .prepare('SELECT id, username, password_hash, coins, is_guest, unlocked_balls FROM users WHERE id = ?')
+    .prepare(
+      'SELECT id, username, password_hash, google_sub, email, coins, is_guest, unlocked_balls FROM users WHERE id = ?'
+    )
     .bind(id)
     .first<UserRow>();
 }
 
 async function findUserByUsername(db: WorkerD1Database, username: string): Promise<UserRow | null> {
+  await ensureUsersGoogleSchema(db);
   return db
-    .prepare('SELECT id, username, password_hash, coins, is_guest, unlocked_balls FROM users WHERE username = ? COLLATE NOCASE')
+    .prepare(
+      'SELECT id, username, password_hash, google_sub, email, coins, is_guest, unlocked_balls FROM users WHERE username = ? COLLATE NOCASE'
+    )
     .bind(username.trim())
+    .first<UserRow>();
+}
+
+async function findUserByGoogleSub(db: WorkerD1Database, googleSub: string): Promise<UserRow | null> {
+  if (!googleSub) return null;
+  await ensureUsersGoogleSchema(db);
+  return db
+    .prepare(
+      'SELECT id, username, password_hash, google_sub, email, coins, is_guest, unlocked_balls FROM users WHERE google_sub = ?'
+    )
+    .bind(googleSub)
     .first<UserRow>();
 }
 
@@ -680,6 +729,211 @@ async function handleAuthProgress(request: Request, env: Env): Promise<Response>
   return jsonResponse(request, env, { token: refreshedToken, user: publicUser });
 }
 
+interface GoogleJwk extends JsonWebKey {
+  kid?: string;
+}
+
+interface GoogleIdTokenPayload {
+  sub?: string;
+  email?: string;
+  email_verified?: boolean;
+  name?: string;
+  given_name?: string;
+  aud?: string;
+  iss?: string;
+  exp?: number;
+}
+
+let cachedGoogleCerts: { keys: GoogleJwk[]; fetchedAt: number } | null = null;
+
+async function fetchGoogleJwks(forceRefresh = false): Promise<GoogleJwk[]> {
+  const now = Date.now();
+  if (!forceRefresh && cachedGoogleCerts && now - cachedGoogleCerts.fetchedAt < 1000 * 60 * 30) {
+    return cachedGoogleCerts.keys;
+  }
+  const res = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+  if (!res.ok) {
+    throw new Error('Failed to fetch Google public keys.');
+  }
+  const body = (await res.json()) as { keys?: GoogleJwk[] };
+  const keys = Array.isArray(body.keys) ? body.keys : [];
+  cachedGoogleCerts = { keys, fetchedAt: now };
+  return keys;
+}
+
+async function verifyGoogleIdToken(
+  credential: string,
+  expectedClientId?: string
+): Promise<GoogleIdTokenPayload | null> {
+  const parts = credential.trim().split('.');
+  if (parts.length !== 3) return null;
+  const [headerB64, payloadB64, sigB64] = parts;
+  if (!headerB64 || !payloadB64 || !sigB64) return null;
+
+  try {
+    const header = JSON.parse(textDecoder.decode(base64UrlDecode(headerB64))) as {
+      alg?: string;
+      kid?: string;
+    };
+    if (header.alg !== 'RS256' || !header.kid) return null;
+
+    let keys = await fetchGoogleJwks(false);
+    let jwk = keys.find((k) => k.kid === header.kid);
+    if (!jwk) {
+      keys = await fetchGoogleJwks(true);
+      jwk = keys.find((k) => k.kid === header.kid);
+    }
+    if (!jwk) return null;
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'jwk',
+      jwk,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const sigBytes = base64UrlDecode(sigB64);
+    const signedInput = textEncoder.encode(`${headerB64}.${payloadB64}`);
+    const valid = await crypto.subtle.verify(
+      'RSASSA-PKCS1-v1_5',
+      cryptoKey,
+      sigBytes as unknown as BufferSource,
+      signedInput as unknown as BufferSource
+    );
+    if (!valid) return null;
+
+    const claims = JSON.parse(
+      textDecoder.decode(base64UrlDecode(payloadB64))
+    ) as GoogleIdTokenPayload;
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (typeof claims.exp !== 'number' || claims.exp < nowSec) return null;
+    if (claims.iss !== 'https://accounts.google.com' && claims.iss !== 'accounts.google.com') {
+      return null;
+    }
+    if (!claims.sub) return null;
+    if (expectedClientId && expectedClientId.trim() && claims.aud !== expectedClientId.trim()) {
+      return null;
+    }
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
+async function allocateUniqueGoogleUsername(
+  db: WorkerD1Database,
+  rawName?: string,
+  rawEmail?: string
+): Promise<string> {
+  const emailPrefix = rawEmail ? rawEmail.split('@')[0] : '';
+  const sanitized = (rawName || emailPrefix || 'Fighter')
+    .replace(/[^a-zA-Z0-9_]/g, '')
+    .slice(0, 12);
+  const base = sanitized.length >= 2 ? sanitized : 'Fighter';
+
+  if (!(await findUserByUsername(db, base))) {
+    return base;
+  }
+  for (let i = 0; i < 12; i++) {
+    const suffix = String(Math.floor(100 + Math.random() * 900));
+    const candidate = `${base.slice(0, 8)}_${suffix}`;
+    if (!(await findUserByUsername(db, candidate))) {
+      return candidate;
+    }
+  }
+  return `G_${Math.floor(100000 + Math.random() * 899999)}`;
+}
+
+async function handleGoogleAuth(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as { credential?: string };
+  const credential = typeof body.credential === 'string' ? body.credential.trim() : '';
+  if (!credential) {
+    return jsonResponse(request, env, { error: 'Missing Google ID credential token.' }, 400);
+  }
+
+  const googleClaims = await verifyGoogleIdToken(credential, env.GOOGLE_CLIENT_ID);
+  if (!googleClaims || !googleClaims.sub) {
+    return jsonResponse(
+      request,
+      env,
+      { error: 'Invalid or expired Google Sign-In token.' },
+      401
+    );
+  }
+
+  const googleSub = googleClaims.sub;
+  const googleEmail = typeof googleClaims.email === 'string' ? googleClaims.email : null;
+
+  // 1. Existing Google-linked account -> sign right in
+  const existingGoogleUser = await findUserByGoogleSub(env.DB, googleSub);
+  if (existingGoogleUser) {
+    if (googleEmail && googleEmail !== existingGoogleUser.email) {
+      await env.DB
+        .prepare(`UPDATE users SET email = ?, updated_at = datetime('now') WHERE id = ?`)
+        .bind(googleEmail, existingGoogleUser.id)
+        .run();
+      existingGoogleUser.email = googleEmail;
+    }
+    const pub = toPublicUser(existingGoogleUser);
+    const token = await signJwt(pub, env.JWT_SECRET || DEFAULT_JWT_SECRET);
+    return jsonResponse(request, env, { token, user: pub });
+  }
+
+  // 2. If caller holds a valid Guest JWT, link Google account to preserve coins & unlocks
+  const bearerToken = extractBearerToken(request);
+  if (bearerToken) {
+    const callerClaims = await verifyJwt(bearerToken, env.JWT_SECRET || DEFAULT_JWT_SECRET);
+    if (callerClaims) {
+      const callerRow = await findUserById(env.DB, callerClaims._id);
+      if (callerRow && Boolean(callerRow.is_guest) && !callerRow.google_sub) {
+        const nextName = callerRow.username.startsWith('Guest_')
+          ? await allocateUniqueGoogleUsername(env.DB, googleClaims.given_name || googleClaims.name, googleEmail || undefined)
+          : callerRow.username;
+        await env.DB
+          .prepare(
+            `UPDATE users
+             SET username = ?, google_sub = ?, email = ?, is_guest = 0, updated_at = datetime('now')
+             WHERE id = ?`
+          )
+          .bind(nextName, googleSub, googleEmail, callerRow.id)
+          .run();
+        const linked = await findUserById(env.DB, callerRow.id);
+        if (linked) {
+          const pub = toPublicUser(linked);
+          const nextToken = await signJwt(pub, env.JWT_SECRET || DEFAULT_JWT_SECRET);
+          return jsonResponse(request, env, { token: nextToken, user: pub });
+        }
+      }
+    }
+  }
+
+  // 3. Create new verified Google player account
+  const id = crypto.randomUUID();
+  const username = await allocateUniqueGoogleUsername(
+    env.DB,
+    googleClaims.given_name || googleClaims.name,
+    googleEmail || undefined
+  );
+  await env.DB
+    .prepare(
+      `INSERT INTO users (id, username, password_hash, google_sub, email, coins, is_guest, unlocked_balls)
+       VALUES (?, ?, NULL, ?, ?, 0, 0, '[]')`
+    )
+    .bind(id, username, googleSub, googleEmail)
+    .run();
+
+  const publicUser: PublicUser = {
+    _id: id,
+    username,
+    ...(googleEmail ? { email: googleEmail } : {}),
+    coins: 0,
+    isGuest: false,
+    unlockedBalls: [],
+  };
+  const token = await signJwt(publicUser, env.JWT_SECRET || DEFAULT_JWT_SECRET);
+  return jsonResponse(request, env, { token, user: publicUser }, 201);
+}
+
 // ============================================================================
 // WORKER WALLET WEBSOCKET (For shop purchases, rerolls & solo/bot rewards)
 // ============================================================================
@@ -705,8 +959,8 @@ async function handleWalletWebSocket(env: Env, claims: JwtClaims): Promise<Respo
           return;
         }
         if (msg.type === 'purchase_character') {
-          const charId = String(msg.payload?.characterId || msg.payload?.ballId || '');
-          const cost = clamp(Math.floor(Number(msg.payload?.cost) || CHARACTER_UNLOCK_COST), 25, 5000);
+          const charId = String(msg.payload?.characterId || msg.payload?.ballId || '').trim();
+          const cost = getAuthoritativeCharacterCost(charId);
           const result = await purchaseCharacterInD1(env.DB, claims._id, charId, cost);
           if (!result.ok || !result.user) {
             sendWs(server, 'purchase_error', { characterId: charId, error: result.error }, msg.requestId);
@@ -773,6 +1027,9 @@ export default {
     }
     if (url.pathname === '/api/auth/login' && request.method === 'POST') {
       return handleLogin(request, env);
+    }
+    if (url.pathname === '/api/auth/google' && request.method === 'POST') {
+      return handleGoogleAuth(request, env);
     }
     if (url.pathname === '/api/auth/guest' && (request.method === 'POST' || request.method === 'GET')) {
       return handleGuest(request, env);
@@ -1589,8 +1846,8 @@ export class GameRoomDO {
       }
 
       case 'purchase_character': {
-        const charId = String(msg.payload?.characterId || msg.payload?.ballId || '');
-        const cost = clamp(Math.floor(Number(msg.payload?.cost) || CHARACTER_UNLOCK_COST), 25, 5000);
+        const charId = String(msg.payload?.characterId || msg.payload?.ballId || '').trim();
+        const cost = getAuthoritativeCharacterCost(charId);
         const result = await purchaseCharacterInD1(this.env.DB, slot.userId, charId, cost);
         if (!result.ok || !result.user) {
           sendWs(slot.socket, 'purchase_error', { characterId: charId, error: result.error }, msg.requestId);
